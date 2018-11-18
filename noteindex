@@ -5,13 +5,11 @@ DATABASE_NAME = "test"
 import argparse
 
 from prettytable import PrettyTable
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient, ASCENDING, TEXT
 
 parser = argparse.ArgumentParser(description='Index pages.')
-parser.add_argument('-p', '--page')
-parser.add_argument('-b', '--book')
-parser.add_argument('-t', '--tag')
-parser.add_argument('-s', '--search')
+parser.add_argument('-a', '--add', nargs='+', help="[book] [page] [desc]")
+parser.add_argument('-s', '--search', nargs='+')
 
 args = parser.parse_args()
 
@@ -22,19 +20,19 @@ db = client[DATABASE_NAME]
 pg = db['book_pages']
 
 pg.create_index([("book_title", ASCENDING), ("page_number", ASCENDING)], unique=True)
+pg.create_index([('description', TEXT)], default_language='english')
 
 if args.search:
-    table = PrettyTable(['book', 'pg', 'tags'])
-    for e in pg.find({'tags': {"$all": args.search.split(",")}}):
-        table.add_row([e["book_title"], e["page_number"], ', '.join(e["tags"])])
+    table = PrettyTable(['book', 'pg', 'desc'])
+    for e in pg.find({'$text': {"$search": ' '.join(args.search)}}):
+        table.add_row([e["book_title"], e["page_number"], e["description"]])
     print(table)
-elif args.book and args.page and args.tag:
+elif args.add:
+    add_args = args.add
     pg.update_one(
         {
-            "book_title": args.book,
-            "page_number": args.page,
-        },
-        {
-            "$addToSet": {'tags': {"$each": args.tag.split(",")}}
+            "book_title": add_args[0],
+            "page_number": add_args[1],
+        }, {
+            '$set': {"description": ' '.join(add_args[2:])}
         }, upsert=True)
-    print("Added: {", args.book, args.page, args.tag, "}")
